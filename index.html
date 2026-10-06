@@ -862,7 +862,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
       stats.appendChild(statCard("Spent",fmt.format(s),"out","expense"));
       stats.appendChild(statCard("Invested",fmt.format(i),"trend","investment"));
       stats.appendChild(statCard("Left over",fmt.format(e-s-i),"scale","net"));
-      var all=sortDesc(inM),top=all.slice(0,10);
+      var all=sortDesc(inM),top=all.slice(0,50);
       ttl.replaceChildren(icon("inbox","sm"),"Last 10 transactions");
       cnt.textContent=all.length?("Showing "+top.length+" of "+all.length+" in "+monthLabel(ym)):"";
       body.innerHTML="";
