@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>My Money Tracker</title>
+<meta name="theme-color" content="#0f766e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -233,6 +234,22 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
 .foot{margin:-6px 0 18px;color:var(--muted);font-size:12.5px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
+
+/* ---------- auth ---------- */
+.btn[disabled]{opacity:.6;pointer-events:none}
+.auth{min-height:100vh;display:grid;place-items:center;padding:20px}
+.auth-card{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:26px}
+.auth-card .logo{margin:0 auto 12px;width:48px;height:48px;border-radius:15px}
+.auth-card h1{font-size:22px;text-align:center;padding:0}
+.auth-card .sub{text-align:center;margin:4px 0 18px}
+.auth-card .inp{margin-bottom:10px}
+.msg{font-size:13px;min-height:20px;margin:0 0 10px}
+.msg.ok{color:var(--earn)} .msg.bad{color:var(--expense)}
+.divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:14px 0}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.code{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-x:auto;white-space:pre;margin:10px 0}
+@media (max-width:860px){.auth-card h1{padding-right:0}}
+
 /* ---------- tablet / mobile ---------- */
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -355,7 +372,9 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
 </svg>
 
-<div class="app">
+<div id="authScreen" class="auth" hidden></div>
+
+<div class="app" id="appShell" hidden>
   <nav class="nav" id="nav" aria-label="Main">
     <div class="brand"><span class="logo"><svg class="ic"><use href="#i-wallet"/></svg></span><span>Money Tracker</span></div>
     <button class="nav-item" data-view="home"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
@@ -378,10 +397,17 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
 <datalist id="dl-investment"></datalist>
 <datalist id="dl-earning"></datalist>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (function(){
   "use strict";
-  var KEY="money-tracker:v1", CKEY="money-tracker:cats:v1", HKEY="money-tracker:holdings:v1", LKEY="money-tracker:loans:v1";
+  /* ============================================================
+     1) PASTE YOUR SUPABASE DETAILS HERE
+        Supabase dashboard → Project Settings → API
+        (use the Project URL and the anon / publishable key — never the service_role key)
+     ============================================================ */
+  var SUPABASE_URL = "https://rbyanuwypaoiohrbnasw.supabase.co";
+  var SUPABASE_ANON_KEY = "sb_publishable_DfT8bMc4LyBtv6a4WMVtOQ_g-buLwoj";
   var NS="http://www.w3.org/2000/svg";
 
   var ICONS=["utensils","coffee","cart","home","car","zap","wifi","phone","bag","heart","dumbbell","shield","film","music","plane","cap","book","gift","layers","repeat","chart","trend","gem","landmark","coins","briefcase","laptop","percent","wallet","card","user","pie","tag","more"];
@@ -423,7 +449,10 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
   function monthLabel(ym){var p=ym.split("-");return new Date(+p[0],+p[1]-1,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"});}
   function shiftMonth(ym,n){var p=ym.split("-");return ymOf(new Date(+p[0],+p[1]-1+n,1));}
   function fmtD(s){var p=s.split("-");if(p.length!==3)return s;return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});}
-  function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+  function uid(){
+    if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,function(c){var r=Math.random()*16|0,v=c==="x"?r:(r&3|8);return v.toString(16);});
+  }
   function sum(a){return a.reduce(function(s,x){return s+x.amount;},0);}
   function sortDesc(a){return a.slice().sort(function(x,y){if(x.date!==y.date)return x.date<y.date?1:-1;return (y.created||0)-(x.created||0);});}
   function hashHue(s){var x=0;for(var i=0;i<s.length;i++)x=(x*31+s.charCodeAt(i))%360;return x;}
@@ -432,7 +461,6 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
   function pctText(v){return (v>=0?"+":"−")+Math.abs(v).toFixed(1)+"%";}
 
   /* ---------- storage ---------- */
-  function loadList(k){try{var r=localStorage.getItem(k);var a=r?JSON.parse(r):[];return Array.isArray(a)?a:[];}catch(e){return [];}}
   function defaultCats(){
     var o={};Object.keys(DEFAULT_CAT).forEach(function(t){o[t]=DEFAULT_CAT[t].map(function(c){return {name:c[0],icon:c[1],hue:c[2]};});});return o;
   }
@@ -449,17 +477,63 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     });
     return ok?out:null;
   }
-  function loadCats(){
-    try{var r=localStorage.getItem(CKEY);if(r){var v=validCats(JSON.parse(r));if(v)return v;}}catch(e){}
-    return defaultCats();
+  /* ---------- Supabase data layer ---------- */
+  var sb=null,userId=null,userEmail="";
+  var items=[],holdings=[],loans=[],cats=defaultCats();
+
+  function itemFromRow(r){return {id:r.id,type:r.type,date:r.tx_date,category:r.category||"",description:r.description||"",amount:Number(r.amount),created:Date.parse(r.created_at)||0};}
+  function itemToRow(t){return {id:t.id,user_id:userId,type:t.type,tx_date:t.date,category:t.category||"",description:t.description||"",amount:t.amount,created_at:new Date(t.created||Date.now()).toISOString()};}
+  function holdingFromRow(r){return {id:r.id,name:r.name,category:r.category||"",invested:Number(r.invested),current:Number(r.current_value),note:r.note||"",created:Date.parse(r.created_at)||0};}
+  function holdingToRow(x){return {id:x.id,user_id:userId,name:x.name,category:x.category||"",invested:x.invested,current_value:x.current,note:x.note||"",created_at:new Date(x.created||Date.now()).toISOString()};}
+  function loanFromRow(r){return {id:r.id,name:r.name,kind:r.kind||"",lender:r.lender||"",principal:Number(r.principal),rate:Number(r.rate),tenure:Number(r.tenure),emi:Number(r.emi),start:r.start_date||"",created:Date.parse(r.created_at)||0};}
+  function loanToRow(l){return {id:l.id,user_id:userId,name:l.name,kind:l.kind||"",lender:l.lender||"",principal:l.principal,rate:l.rate,tenure:l.tenure,emi:l.emi,start_date:l.start||null,created_at:new Date(l.created||Date.now()).toISOString()};}
+
+  function onDbError(e){console.error(e);toast("Couldn't save: "+((e&&e.message)?e.message:"network problem")+" — reload to resync");}
+  function run(p){
+    return Promise.resolve(p).then(function(res){if(res&&res.error)onDbError(res.error);return res;},function(e){onDbError(e);});
   }
-  var items=loadList(KEY),holdings=loadList(HKEY),loans=loadList(LKEY),cats=loadCats(),warned=false;
-  function warnOnce(){if(!warned){warned=true;toast("Couldn't save in this browser — download a backup to keep a copy");}}
-  function put(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){warnOnce();}}
-  function save(){put(KEY,items);}
-  function saveH(){put(HKEY,holdings);}
-  function saveL(){put(LKEY,loans);}
-  function saveCats(){put(CKEY,cats);refreshLists();}
+  function upsert(table,row){return run(sb.from(table).upsert(row));}
+  function upsertMany(table,rows){
+    var jobs=[];for(var i=0;i<rows.length;i+=500)jobs.push(run(sb.from(table).upsert(rows.slice(i,i+500))));
+    return Promise.all(jobs);
+  }
+  function del(table,id){return run(sb.from(table).delete().eq("id",id));}
+  var catTimer;
+  function saveCats(){
+    refreshLists();clearTimeout(catTimer);
+    catTimer=setTimeout(function(){run(sb.from("user_settings").upsert({user_id:userId,categories:cats,updated_at:new Date().toISOString()}));},300);
+  }
+  function fetchAll(table,orderCol){
+    var out=[],size=1000;
+    function page(from){
+      return sb.from(table).select("*").order(orderCol,{ascending:false}).order("id").range(from,from+size-1).then(function(r){
+        if(r.error)throw r.error;
+        out=out.concat(r.data);
+        return r.data.length<size?out:page(from+size);
+      });
+    }
+    return page(0);
+  }
+  function loadAll(){
+    return Promise.all([
+      fetchAll("transactions","tx_date"),
+      fetchAll("holdings","created_at"),
+      fetchAll("loans","created_at"),
+      sb.from("user_settings").select("categories").maybeSingle()
+    ]).then(function(res){
+      if(res[3].error)throw res[3].error;
+      items=res[0].map(itemFromRow);holdings=res[1].map(holdingFromRow);loans=res[2].map(loanFromRow);
+      var vc=res[3].data&&validCats(res[3].data.categories);
+      cats=vc||defaultCats();
+      refreshLists();
+      if(!vc)run(sb.from("user_settings").upsert({user_id:userId,categories:cats}));
+    });
+  }
+  function downloadFile(name,text,mime){
+    var blob=new Blob([text],{type:mime+";charset=utf-8"}),url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);a.remove();},500);
+  }
 
   var toastTimer;
   function toast(msg){var t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.classList.remove("show");},2400);}
@@ -614,7 +688,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     eb.onclick=function(){state.editingId=t.id;o.onChange();};
     var db=h("button",{class:"icon-btn danger",type:"button",title:"Delete","aria-label":"Delete transaction"});
     twoStep(db,function(){return [icon("trash","sm")];},function(){return [icon("trash","sm"),"Sure?"];},function(){
-      items=items.filter(function(x){return x.id!==t.id;});save();toast("Deleted");o.onChange();
+      items=items.filter(function(x){return x.id!==t.id;});del("transactions",t.id);toast("Deleted");o.onChange();
     });
     tr.appendChild(h("td",{class:"c-act"},[eb,db]));
     return tr;
@@ -644,7 +718,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
       if(!(a>0)){amt.focus();return;}
       t.date=date.value;if(type)t.type=type.value;
       t.category=cat.value.trim();t.description=desc.value.trim();t.amount=Math.round(a*100)/100;
-      state.editingId=null;save();toast("Saved");o.onChange();
+      state.editingId=null;upsert("transactions",itemToRow(t));toast("Saved");o.onChange();
     };
     cn.onclick=function(){state.editingId=null;o.onChange();};
     tr.addEventListener("keydown",function(e){
@@ -682,7 +756,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
       var cat=picker.resolve();
       if(!cat){err.textContent="Pick a category or type a new one.";return;}
       var it={id:uid(),type:type,date:fDate.value,category:cat,description:fNote.value.trim(),amount:Math.round(a*100)/100,created:Date.now()};
-      items.push(it);save();closeDialog(dlg);toast(TYPE[type].label+" added");
+      items.push(it);upsert("transactions",itemToRow(it));closeDialog(dlg);toast(TYPE[type].label+" added");
       if(o.cb)o.cb(it);
     };
     body.appendChild(h("h2",{text:locked?("Add "+SCREEN[type].noun):"Add transaction"}));
@@ -699,9 +773,18 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
 
   /* ---------- Category dialog (settings) ---------- */
   function renameCategory(type,old,name){
-    if(type==="investment"){holdings.forEach(function(x){if(same(x.category,old))x.category=name;});saveH();}
-    if(type==="loan"){loans.forEach(function(x){if(same(x.kind,old))x.kind=name;});saveL();}
-    if(TYPE[type]){items.forEach(function(x){if(x.type===type&&same(x.category,old))x.category=name;});save();}
+    if(type==="investment"){
+      var hc=[];holdings.forEach(function(x){if(same(x.category,old)){x.category=name;hc.push(holdingToRow(x));}});
+      if(hc.length)upsertMany("holdings",hc);
+    }
+    if(type==="loan"){
+      var lc=[];loans.forEach(function(x){if(same(x.kind,old)){x.kind=name;lc.push(loanToRow(x));}});
+      if(lc.length)upsertMany("loans",lc);
+    }
+    if(TYPE[type]){
+      var ic=[];items.forEach(function(x){if(x.type===type&&same(x.category,old)){x.category=name;ic.push(itemToRow(x));}});
+      if(ic.length)upsertMany("transactions",ic);
+    }
   }
   function usageCount(type,name){
     var n=0;
@@ -751,8 +834,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     paint();openDialog(dlg);nameInp.focus();
   }
 
-  /* ---------- downloads (host-provided) ---------- */
-  var dlP=(window.claude&&window.claude.use)?window.claude.use("downloads").catch(function(){return null;}):Promise.resolve(null);
+  /* ---------- CSV ---------- */
   function toCsv(){
     var q=function(v){return '"'+String(v==null?"":v).replace(/"/g,'""')+'"';};
     var rows=[["Date","Type","Category","Description","Amount"].map(q).join(",")];
@@ -853,8 +935,8 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
       var cat=picker.resolve();
       if(!cat){err.textContent="Pick a category or type a new one.";return;}
       var rec={name:nm,category:cat,invested:Math.round(a*100)/100,current:Math.round(c*100)/100,note:note.value.trim()};
-      if(existing)Object.assign(existing,rec);else holdings.push(Object.assign({id:uid(),created:Date.now()},rec));
-      saveH();closeDialog(dlg);toast(existing?"Holding updated":"Holding added");done();
+      var obj=existing||Object.assign({id:uid(),created:Date.now()},rec);if(existing)Object.assign(existing,rec);else holdings.push(obj);
+      upsert("holdings",holdingToRow(obj));closeDialog(dlg);toast(existing?"Holding updated":"Holding added");done();
     };
     body.appendChild(h("h2",{text:existing?"Edit holding":"Add holding"}));
     body.appendChild(h("label",{class:"field"},[h("span",{text:"Name"}),name]));
@@ -873,7 +955,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     eb.onclick=function(){openHolding(hd,onChange);};
     var db=h("button",{class:"icon-btn danger",type:"button",title:"Delete","aria-label":"Delete "+hd.name});
     twoStep(db,function(){return [icon("trash","sm")];},function(){return [icon("trash","sm"),"Sure?"];},function(){
-      holdings=holdings.filter(function(x){return x.id!==hd.id;});saveH();toast("Holding deleted");onChange();
+      holdings=holdings.filter(function(x){return x.id!==hd.id;});del("holdings",hd.id);toast("Holding deleted");onChange();
     });
     var sub=catInfo("investment",hd.category).name+(hd.note?" · "+hd.note:"");
     return h("div",{class:"hold-row"},[
@@ -995,8 +1077,8 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
       var kind=picker.resolve();
       if(!kind){err.textContent="Pick a loan type or type a new one.";return;}
       var rec={name:nm,kind:kind,lender:lender.value.trim(),principal:Math.round(P*100)/100,rate:r,tenure:n,emi:Math.round(e*100)/100,start:start.value||""};
-      if(existing)Object.assign(existing,rec);else loans.push(Object.assign({id:uid(),created:Date.now()},rec));
-      saveL();closeDialog(dlg);toast(existing?"Loan updated":"Loan added");done();
+      var obj=existing||Object.assign({id:uid(),created:Date.now()},rec);if(existing)Object.assign(existing,rec);else loans.push(obj);
+      upsert("loans",loanToRow(obj));closeDialog(dlg);toast(existing?"Loan updated":"Loan added");done();
     };
     body.appendChild(h("h2",{text:existing?"Edit loan":"Add loan"}));
     body.appendChild(h("label",{class:"field"},[h("span",{text:"Loan name"}),name]));
@@ -1028,7 +1110,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     eb.onclick=function(){openLoan(l,onChange);};
     var db=h("button",{class:"icon-btn danger",type:"button",title:"Delete","aria-label":"Delete "+l.name});
     twoStep(db,function(){return [icon("trash","sm")];},function(){return [icon("trash","sm"),"Sure?"];},function(){
-      loans=loans.filter(function(x){return x.id!==l.id;});saveL();toast("Loan deleted");onChange();
+      loans=loans.filter(function(x){return x.id!==l.id;});del("loans",l.id);toast("Loan deleted");onChange();
     });
     var sub=ci.name+(l.lender?" · "+l.lender:"");
     var top=h("div",{class:"loan-top"},[chip("loan",l.kind),h("div",{class:"nm"},[h("b",{text:l.name}),h("span",{class:"muted",text:sub})]),eb,db]);
@@ -1142,7 +1224,7 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     /* --- data --- */
     var dataCard=h("section",{class:"card","aria-labelledby":"dt"});
     dataCard.appendChild(h("div",{class:"card-head"},[h("h2",{id:"dt"},[icon("download","sm"),"Your data"])]));
-    dataCard.appendChild(h("div",{class:"note",text:"Everything is stored in this browser on this device only. Download a backup now and then, and use it to move your data to another device."}));
+    dataCard.appendChild(h("div",{class:"note",text:"Your data lives in your own Supabase database and syncs across all your devices. It is still a good idea to download a backup now and then."}));
     var exportRow=h("div",{class:"data-row"}),importRow=h("div",{class:"data-row"}),resetRow=h("div",{class:"data-row"});
     dataCard.appendChild(exportRow);dataCard.appendChild(importRow);dataCard.appendChild(resetRow);
     main.appendChild(dataCard);
@@ -1151,14 +1233,11 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     var csvBtn=h("button",{class:"btn small",type:"button",hidden:"hidden"},[icon("download","sm"),"Transactions CSV"]);
     var jsonBtn=h("button",{class:"btn small",type:"button",hidden:"hidden"},[icon("download","sm"),"Full backup (.json)"]);
     exportRow.appendChild(h("div",{class:"data-actions"},[csvBtn,jsonBtn]));
-    dlP.then(function(dl){
-      if(!dl){exportRow.appendChild(h("span",{class:"muted",text:"Downloads aren't available in this view."}));return;}
-      csvBtn.hidden=false;jsonBtn.hidden=false;
-      csvBtn.onclick=function(){dl.save({filename:"money-tracker-transactions.csv",data:toCsv()}).catch(function(){});};
-      jsonBtn.onclick=function(){dl.save({filename:"money-tracker-backup.json",data:JSON.stringify({version:2,items:items,holdings:holdings,loans:loans,cats:cats},null,1)}).catch(function(){});};
-    });
+    csvBtn.hidden=false;jsonBtn.hidden=false;
+    csvBtn.onclick=function(){downloadFile("money-tracker-transactions.csv",toCsv(),"text/csv");};
+    jsonBtn.onclick=function(){downloadFile("money-tracker-backup.json",JSON.stringify({version:2,items:items,holdings:holdings,loans:loans,cats:cats},null,1),"application/json");};
 
-    importRow.appendChild(h("div",null,[h("b",{text:"Restore from backup"}),h("span",{class:"muted",text:"Replaces the data in this browser"})]));
+    importRow.appendChild(h("div",null,[h("b",{text:"Restore from backup"}),h("span",{class:"muted",text:"Adds the records to your account"})]));
     var file=h("input",{type:"file",accept:"application/json,.json",hidden:"hidden","aria-label":"Choose backup file"});
     var pickBtn=h("button",{class:"btn small",type:"button"},[icon("upload","sm"),"Choose file"]);
     var importMsg=h("div",{class:"data-actions"},[pickBtn]);
@@ -1173,18 +1252,24 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
         if(!data||!Array.isArray(data.items)){toast("That doesn't look like a backup from this app");return;}
         var num=function(v){return typeof v==="number"&&isFinite(v);};
         var inItems=data.items.filter(function(x){return x&&TYPE[x.type]&&/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&num(x.amount)&&x.amount>0;}).map(function(x){
-          return {id:x.id||uid(),type:x.type,date:x.date,category:String(x.category||""),description:String(x.description||""),amount:x.amount,created:x.created||Date.now()};});
+          return {id:uid(),type:x.type,date:x.date,category:String(x.category||""),description:String(x.description||""),amount:x.amount,created:x.created||Date.now()};});
         var inHold=(Array.isArray(data.holdings)?data.holdings:[]).filter(function(x){return x&&typeof x.name==="string"&&num(x.invested)&&x.invested>=0&&num(x.current)&&x.current>=0;}).map(function(x){
-          return {id:x.id||uid(),name:x.name,category:String(x.category||""),invested:x.invested,current:x.current,note:String(x.note||""),created:x.created||Date.now()};});
+          return {id:uid(),name:x.name,category:String(x.category||""),invested:x.invested,current:x.current,note:String(x.note||""),created:x.created||Date.now()};});
         var inLoans=(Array.isArray(data.loans)?data.loans:[]).filter(function(x){return x&&typeof x.name==="string"&&num(x.principal)&&x.principal>0&&num(x.rate)&&x.rate>=0&&num(x.tenure)&&x.tenure>0&&num(x.emi)&&x.emi>0;}).map(function(x){
-          return {id:x.id||uid(),name:x.name,kind:String(x.kind||""),lender:String(x.lender||""),principal:x.principal,rate:x.rate,tenure:Math.round(x.tenure),emi:x.emi,start:/^\d{4}-\d{2}-\d{2}$/.test(x.start||"")?x.start:"",created:x.created||Date.now()};});
+          return {id:uid(),name:x.name,kind:String(x.kind||""),lender:String(x.lender||""),principal:x.principal,rate:x.rate,tenure:Math.round(x.tenure),emi:x.emi,start:/^\d{4}-\d{2}-\d{2}$/.test(x.start||"")?x.start:"",created:x.created||Date.now()};});
         var newCats=validCats(data.cats);
         importMsg.innerHTML="";
-        var ok=h("button",{class:"btn small primary",type:"button",text:"Replace with "+inItems.length+" transactions, "+inHold.length+" holdings, "+inLoans.length+" loans"});
+        var ok=h("button",{class:"btn small primary",type:"button",text:"Add "+inItems.length+" transactions, "+inHold.length+" holdings, "+inLoans.length+" loans"});
         var no=h("button",{class:"btn small",type:"button",text:"Cancel"});
         ok.onclick=function(){
-          items=inItems;holdings=inHold;loans=inLoans;if(newCats)cats=newCats;
-          save();saveH();saveL();saveCats();toast("Backup restored");mountSettings();
+          ok.setAttribute("disabled","disabled");
+          items=items.concat(inItems);holdings=holdings.concat(inHold);loans=loans.concat(inLoans);
+          if(newCats){
+            CAT_KEYS.forEach(function(t){newCats[t].forEach(function(c){if(!cats[t].some(function(e){return same(e.name,c.name);}))cats[t].push(c);});});
+            saveCats();
+          }
+          Promise.all([upsertMany("transactions",inItems.map(itemToRow)),upsertMany("holdings",inHold.map(holdingToRow)),upsertMany("loans",inLoans.map(loanToRow))])
+            .then(function(){toast("Backup imported");mountSettings();});
         };
         no.onclick=function(){mountSettings();};
         importMsg.appendChild(ok);importMsg.appendChild(no);
@@ -1198,6 +1283,13 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
       cats=defaultCats();saveCats();toast("Categories reset");mountSettings();
     });
     resetRow.appendChild(resetBtn);
+
+    var out=h("button",{class:"btn small",type:"button"},[icon("x","sm"),"Sign out"]);
+    out.onclick=function(){out.setAttribute("disabled","disabled");sb.auth.signOut();};
+    main.appendChild(h("section",{class:"card"},[
+      h("div",{class:"card-head"},[h("h2",{},[icon("user","sm"),"Account"])]),
+      h("div",{class:"data-row"},[h("div",null,[h("b",{text:userEmail||"Signed in"}),h("span",{class:"muted",text:"Signed in on this device"})]),out])
+    ]));
   }
 
   /* ---------- navigation ---------- */
@@ -1213,8 +1305,117 @@ dialog::backdrop{background:rgba(5,15,12,.5);backdrop-filter:blur(2px)}
     else mountLedger(view);
     window.scrollTo(0,0);
   }
-  document.querySelectorAll(".nav-item").forEach(function(b){b.onclick=function(){go(b.getAttribute("data-view"));};});
-  go("home");
+  /* ================= AUTH + BOOT ================= */
+  var authEl=$("authScreen"),appEl=$("appShell"),ready=false,booted=false;
+
+  function authCard(kids){
+    authEl.hidden=false;authEl.innerHTML="";
+    authEl.appendChild(h("div",{class:"auth-card"},[h("div",{class:"logo"},[icon("wallet")])].concat(kids)));
+  }
+  function loadingBox(){return h("div",{class:"empty"},[icon("inbox"),h("strong",{text:"Loading your data…"})]);}
+
+  function showSetup(){
+    appEl.hidden=true;
+    authCard([
+      h("h1",{text:"Connect Supabase"}),
+      h("div",{class:"sub",text:"One quick step before the app can save your data."}),
+      h("p",{class:"muted",text:"Open this file (index.html), find the two lines near the top of the script and paste your project's URL and anon key from Supabase → Project Settings → API:"}),
+      h("div",{class:"code",text:'var SUPABASE_URL = "https://xxxx.supabase.co";\nvar SUPABASE_ANON_KEY = "eyJ...";'}),
+      h("p",{class:"muted",text:"Then run schema.sql in the Supabase SQL editor and redeploy. The README has every step."})
+    ]);
+  }
+  function showFatal(msg){appEl.hidden=true;authCard([h("h1",{text:"Something went wrong"}),h("div",{class:"sub",text:msg})]);}
+
+  function showAuth(){
+    appEl.hidden=true;
+    var mode="in";
+    var email=h("input",{type:"email",class:"inp",placeholder:"you@example.com",autocomplete:"email",inputmode:"email","aria-label":"Email"});
+    var pass=h("input",{type:"password",class:"inp",placeholder:"Password (6+ characters)",autocomplete:"current-password","aria-label":"Password"});
+    var msg=h("p",{class:"msg",role:"status"});
+    var tIn=h("button",{type:"button",role:"tab",text:"Sign in"}),tUp=h("button",{type:"button",role:"tab",text:"Create account"});
+    var tabs=h("div",{class:"seg3 full",role:"tablist"},[tIn,tUp]);
+    var submit=h("button",{class:"btn primary",type:"button",style:"width:100%"});
+    var magic=h("button",{class:"btn",type:"button",style:"width:100%"},[icon("inbox","sm"),"Email me a sign-in link"]);
+    function say(t,ok){msg.textContent=t||"";msg.className="msg"+(t?(ok?" ok":" bad"):"");}
+    function busy(b){[submit,magic,tIn,tUp].forEach(function(x){if(b)x.setAttribute("disabled","disabled");else x.removeAttribute("disabled");});}
+    function setMode(m){
+      mode=m;tIn.setAttribute("aria-selected",String(m==="in"));tUp.setAttribute("aria-selected",String(m==="up"));
+      submit.textContent=m==="in"?"Sign in":"Create account";
+      pass.setAttribute("autocomplete",m==="in"?"current-password":"new-password");say("");
+    }
+    tIn.onclick=function(){setMode("in");};tUp.onclick=function(){setMode("up");};
+    function back(){return location.origin+location.pathname;}
+    submit.onclick=function(){
+      var e=email.value.trim(),p=pass.value;
+      if(!e||!p){say("Enter your email and password.");return;}
+      if(mode==="up"&&p.length<6){say("Use at least 6 characters for the password.");return;}
+      busy(true);say("");
+      var req=mode==="in"?sb.auth.signInWithPassword({email:e,password:p}):sb.auth.signUp({email:e,password:p,options:{emailRedirectTo:back()}});
+      req.then(function(r){
+        busy(false);
+        if(r.error){say(r.error.message);return;}
+        if(mode==="up"&&!(r.data&&r.data.session))say("Account created. Check your email to confirm it, then sign in.",true);
+      },function(err){busy(false);say((err&&err.message)||"Network problem. Try again.");});
+    };
+    magic.onclick=function(){
+      var e=email.value.trim();
+      if(!e){say("Enter your email first.");return;}
+      busy(true);say("");
+      sb.auth.signInWithOtp({email:e,options:{emailRedirectTo:back()}}).then(function(r){
+        busy(false);
+        if(r.error)say(r.error.message);else say("Link sent. Open it on this device to sign in.",true);
+      },function(err){busy(false);say((err&&err.message)||"Network problem. Try again.");});
+    };
+    authCard([
+      h("h1",{text:"My Money Tracker"}),
+      h("div",{class:"sub",text:"Sign in to see your data on any device."}),
+      tabs,email,pass,msg,submit,
+      h("div",{class:"divider",text:"or"}),
+      magic
+    ]);
+    authEl.onkeydown=function(ev){if(ev.key==="Enter"&&ev.target.tagName==="INPUT"){ev.preventDefault();submit.click();}};
+    setMode("in");
+  }
+
+  function showLoadError(e){
+    var m=(e&&e.message)||"Unknown error";
+    var hint=/relation|does not exist|schema cache|permission denied/i.test(m)?"The database tables look missing. Run schema.sql in the Supabase SQL editor, then retry.":"Check your connection and try again.";
+    var retry=h("button",{class:"btn primary",type:"button",text:"Retry"});
+    var out=h("button",{class:"btn",type:"button",text:"Sign out"});
+    retry.onclick=function(){start();};
+    out.onclick=function(){sb.auth.signOut();};
+    main.innerHTML="";
+    main.appendChild(h("div",{class:"card"},[emptyBox("inbox","Couldn't load your data",m+" — "+hint),h("div",{class:"head-actions",style:"justify-content:center;padding:0 0 22px"},[retry,out])]));
+  }
+  function start(){
+    main.innerHTML="";main.appendChild(loadingBox());
+    loadAll().then(function(){ready=true;go("home");}).catch(showLoadError);
+  }
+
+  function handleSession(session){
+    if(!session){
+      if(!booted&&!authEl.hidden)return;
+      booted=false;ready=false;userId=null;userEmail="";
+      items=[];holdings=[];loans=[];cats=defaultCats();refreshLists();
+      showAuth();return;
+    }
+    if(booted&&userId===session.user.id)return;
+    userId=session.user.id;userEmail=session.user.email||"";booted=true;
+    authEl.hidden=true;appEl.hidden=false;
+    start();
+  }
+
+  function initApp(){
+    var bad=function(v){return !v||v.indexOf("YOUR-")>-1;};
+    if(bad(SUPABASE_URL)||bad(SUPABASE_ANON_KEY)){showSetup();return;}
+    if(!window.supabase||!window.supabase.createClient){showFatal("Couldn't load the Supabase library. Check your connection and reload.");return;}
+    sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange(function(ev,session){setTimeout(function(){handleSession(session);},0);});
+    sb.auth.getSession().then(function(r){handleSession(r.data&&r.data.session);});
+  }
+
+  document.querySelectorAll(".nav-item").forEach(function(b){b.onclick=function(){if(ready)go(b.getAttribute("data-view"));};});
+  initApp();
 })();
 </script>
 </body>
